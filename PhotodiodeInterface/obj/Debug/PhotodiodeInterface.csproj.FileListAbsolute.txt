@@ -1,0 +1,14 @@
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\ContAcqVoltageSamples_IntClk_ToFile.exe.config
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\ContAcqVoltageSamples_IntClk_ToFile.exe
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\ContAcqVoltageSamples_IntClk_ToFile.pdb
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\NationalInstruments.Common.dll
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\NationalInstruments.DAQmx.dll
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\NationalInstruments.Common.xml
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\bin\Debug\NationalInstruments.DAQmx.xml
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\PhotodiodeInterface.csproj.AssemblyReference.cache
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\PhotodiodeInterface.csproj.GenerateResource.cache
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\PhotodiodeInterface.csproj.CoreCompileInputs.cache
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\Photodio.8D8AACF9.Up2Date
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\ContAcqVoltageSamples_IntClk_ToFile.exe
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\ContAcqVoltageSamples_IntClk_ToFile.pdb
+C:\Users\logan.schorr\Documents\GitHub\photodiode_recording\PhotodiodeInterface\obj\Debug\PhotdiodeInterface.MainForm.resources
