@@ -91,6 +91,7 @@ using System.Data;
 using System.Drawing;
 using System.IO;
 using System.Linq.Expressions;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 
@@ -121,7 +122,6 @@ namespace PhotdiodeInterface
         private Label minimumLabel;
         private Label physicalChannelLabel;
         private Label rateLabel;
-        private Label samplesLabel;
         private Label fileTypeWriteLabel;
         private Label triggerSourceLabel;
         private Label horizontalScaleLabel;
@@ -132,7 +132,6 @@ namespace PhotdiodeInterface
         private TextBox filePathWriteTextBox;
         private TextBox triggerSourceTextBox;
         private NumericUpDown rateNumeric;
-        private NumericUpDown samplesPerChannelNumeric;
         private NumericUpDown minimumValueNumeric;
         private NumericUpDown maximumValueNumeric;
         private NumericUpDown horizontalScaleNumeric;
@@ -150,7 +149,7 @@ namespace PhotdiodeInterface
         private RadioButton pauseWhenHighButton;
         private RadioButton pauseWhenLowButton;
         private Chart waveformChart;
-        private Queue<double> plotBuffer = new Queue<double>();
+        private Queue<double> plotHistory = new Queue<double>();
         private DigitalLevelPauseTriggerCondition gateLevel = DigitalLevelPauseTriggerCondition.High;
         private IContainer components;
         private DateTime lastPlotUpdate = DateTime.MinValue;
@@ -159,12 +158,18 @@ namespace PhotdiodeInterface
         private bool recordingEnabled = false;
         private bool plottingEnabled = false;
         private bool statisticsEnabled = true;
-        private int plotSamples;
-        private long nextStatisticsSample = 0;
         private long totalSamplesAcquired = 0;
+        private long statisticsSamplesCollected;
         private double[,] data;
+        private double samplesPerStatisticsInterval;
+        private double nextStatisticsSample;
+        private double statisticsSum;
+        private double statisticsSumSq;
+        private double statisticsMin;
+        private double statisticsMax;
         private string outputRootFolder;
         private string sessionFolder;
+        
         public MainForm()
         {
             InitializeComponent();
@@ -207,9 +212,7 @@ namespace PhotdiodeInterface
             this.physicalChannelLabel = new System.Windows.Forms.Label();
             this.timingParametersGroupBox = new System.Windows.Forms.GroupBox();
             this.rateNumeric = new System.Windows.Forms.NumericUpDown();
-            this.samplesLabel = new System.Windows.Forms.Label();
             this.rateLabel = new System.Windows.Forms.Label();
-            this.samplesPerChannelNumeric = new System.Windows.Forms.NumericUpDown();
             this.filePathWriteTextBox = new System.Windows.Forms.TextBox();
             this.fileToolTip = new System.Windows.Forms.ToolTip(this.components);
             this.writeToFileGroupBox = new System.Windows.Forms.GroupBox();
@@ -247,7 +250,6 @@ namespace PhotdiodeInterface
             ((System.ComponentModel.ISupportInitialize)(this.maximumValueNumeric)).BeginInit();
             this.timingParametersGroupBox.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.rateNumeric)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.samplesPerChannelNumeric)).BeginInit();
             this.writeToFileGroupBox.SuspendLayout();
             this.saveFileTypePanel.SuspendLayout();
             this.triggerParametersGroupBox.SuspendLayout();
@@ -272,14 +274,14 @@ namespace PhotdiodeInterface
             this.channelParametersGroupBox.FlatStyle = System.Windows.Forms.FlatStyle.System;
             this.channelParametersGroupBox.Location = new System.Drawing.Point(8, 8);
             this.channelParametersGroupBox.Name = "channelParametersGroupBox";
-            this.channelParametersGroupBox.Size = new System.Drawing.Size(224, 120);
+            this.channelParametersGroupBox.Size = new System.Drawing.Size(224, 112);
             this.channelParametersGroupBox.TabIndex = 0;
             this.channelParametersGroupBox.TabStop = false;
             this.channelParametersGroupBox.Text = "Channel Parameters";
             // 
             // physicalChannelComboBox
             // 
-            this.physicalChannelComboBox.Location = new System.Drawing.Point(126, 24);
+            this.physicalChannelComboBox.Location = new System.Drawing.Point(126, 23);
             this.physicalChannelComboBox.Name = "physicalChannelComboBox";
             this.physicalChannelComboBox.Size = new System.Drawing.Size(90, 21);
             this.physicalChannelComboBox.TabIndex = 1;
@@ -288,7 +290,7 @@ namespace PhotdiodeInterface
             // minimumValueNumeric
             // 
             this.minimumValueNumeric.DecimalPlaces = 2;
-            this.minimumValueNumeric.Location = new System.Drawing.Point(126, 56);
+            this.minimumValueNumeric.Location = new System.Drawing.Point(126, 53);
             this.minimumValueNumeric.Maximum = new decimal(new int[] {
             10,
             0,
@@ -307,7 +309,7 @@ namespace PhotdiodeInterface
             // maximumValueNumeric
             // 
             this.maximumValueNumeric.DecimalPlaces = 2;
-            this.maximumValueNumeric.Location = new System.Drawing.Point(126, 88);
+            this.maximumValueNumeric.Location = new System.Drawing.Point(126, 83);
             this.maximumValueNumeric.Maximum = new decimal(new int[] {
             10,
             0,
@@ -331,7 +333,7 @@ namespace PhotdiodeInterface
             // maximumLabel
             // 
             this.maximumLabel.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.maximumLabel.Location = new System.Drawing.Point(16, 88);
+            this.maximumLabel.Location = new System.Drawing.Point(16, 85);
             this.maximumLabel.Name = "maximumLabel";
             this.maximumLabel.Size = new System.Drawing.Size(112, 16);
             this.maximumLabel.TabIndex = 4;
@@ -340,7 +342,7 @@ namespace PhotdiodeInterface
             // minimumLabel
             // 
             this.minimumLabel.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.minimumLabel.Location = new System.Drawing.Point(16, 56);
+            this.minimumLabel.Location = new System.Drawing.Point(16, 55);
             this.minimumLabel.Name = "minimumLabel";
             this.minimumLabel.Size = new System.Drawing.Size(104, 15);
             this.minimumLabel.TabIndex = 2;
@@ -349,7 +351,7 @@ namespace PhotdiodeInterface
             // physicalChannelLabel
             // 
             this.physicalChannelLabel.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.physicalChannelLabel.Location = new System.Drawing.Point(16, 26);
+            this.physicalChannelLabel.Location = new System.Drawing.Point(16, 25);
             this.physicalChannelLabel.Name = "physicalChannelLabel";
             this.physicalChannelLabel.Size = new System.Drawing.Size(96, 16);
             this.physicalChannelLabel.TabIndex = 0;
@@ -358,13 +360,11 @@ namespace PhotdiodeInterface
             // timingParametersGroupBox
             // 
             this.timingParametersGroupBox.Controls.Add(this.rateNumeric);
-            this.timingParametersGroupBox.Controls.Add(this.samplesLabel);
             this.timingParametersGroupBox.Controls.Add(this.rateLabel);
-            this.timingParametersGroupBox.Controls.Add(this.samplesPerChannelNumeric);
             this.timingParametersGroupBox.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.timingParametersGroupBox.Location = new System.Drawing.Point(8, 140);
+            this.timingParametersGroupBox.Location = new System.Drawing.Point(8, 126);
             this.timingParametersGroupBox.Name = "timingParametersGroupBox";
-            this.timingParametersGroupBox.Size = new System.Drawing.Size(224, 92);
+            this.timingParametersGroupBox.Size = new System.Drawing.Size(224, 50);
             this.timingParametersGroupBox.TabIndex = 1;
             this.timingParametersGroupBox.TabStop = false;
             this.timingParametersGroupBox.Text = "Timing Parameters";
@@ -372,7 +372,7 @@ namespace PhotdiodeInterface
             // rateNumeric
             // 
             this.rateNumeric.DecimalPlaces = 2;
-            this.rateNumeric.Location = new System.Drawing.Point(126, 56);
+            this.rateNumeric.Location = new System.Drawing.Point(126, 23);
             this.rateNumeric.Maximum = new decimal(new int[] {
             100000,
             0,
@@ -388,47 +388,21 @@ namespace PhotdiodeInterface
             0});
             this.rateNumeric.ValueChanged += new System.EventHandler(this.rateNumeric_ValueChanged);
             // 
-            // samplesLabel
-            // 
-            this.samplesLabel.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.samplesLabel.Location = new System.Drawing.Point(16, 26);
-            this.samplesLabel.Name = "samplesLabel";
-            this.samplesLabel.Size = new System.Drawing.Size(104, 16);
-            this.samplesLabel.TabIndex = 0;
-            this.samplesLabel.Text = "Samples/Channel:";
-            // 
             // rateLabel
             // 
             this.rateLabel.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.rateLabel.Location = new System.Drawing.Point(16, 58);
+            this.rateLabel.Location = new System.Drawing.Point(16, 25);
             this.rateLabel.Name = "rateLabel";
             this.rateLabel.Size = new System.Drawing.Size(56, 16);
             this.rateLabel.TabIndex = 2;
             this.rateLabel.Text = "Rate (Hz):";
-            // 
-            // samplesPerChannelNumeric
-            // 
-            this.samplesPerChannelNumeric.Location = new System.Drawing.Point(126, 24);
-            this.samplesPerChannelNumeric.Maximum = new decimal(new int[] {
-            100000,
-            0,
-            0,
-            0});
-            this.samplesPerChannelNumeric.Name = "samplesPerChannelNumeric";
-            this.samplesPerChannelNumeric.Size = new System.Drawing.Size(90, 20);
-            this.samplesPerChannelNumeric.TabIndex = 1;
-            this.samplesPerChannelNumeric.Value = new decimal(new int[] {
-            100,
-            0,
-            0,
-            0});
             // 
             // filePathWriteTextBox
             // 
             this.filePathWriteTextBox.Location = new System.Drawing.Point(120, 57);
             this.filePathWriteTextBox.Name = "filePathWriteTextBox";
             this.filePathWriteTextBox.ReadOnly = true;
-            this.filePathWriteTextBox.Size = new System.Drawing.Size(385, 20);
+            this.filePathWriteTextBox.Size = new System.Drawing.Size(585, 20);
             this.filePathWriteTextBox.TabIndex = 4;
             this.filePathWriteTextBox.Text = "Choose file location";
             // 
@@ -445,7 +419,7 @@ namespace PhotdiodeInterface
             this.writeToFileGroupBox.FlatStyle = System.Windows.Forms.FlatStyle.System;
             this.writeToFileGroupBox.Location = new System.Drawing.Point(238, 343);
             this.writeToFileGroupBox.Name = "writeToFileGroupBox";
-            this.writeToFileGroupBox.Size = new System.Drawing.Size(547, 120);
+            this.writeToFileGroupBox.Size = new System.Drawing.Size(741, 120);
             this.writeToFileGroupBox.TabIndex = 2;
             this.writeToFileGroupBox.TabStop = false;
             this.writeToFileGroupBox.Text = "Write To File";
@@ -506,7 +480,7 @@ namespace PhotdiodeInterface
             // browseWriteButton
             // 
             this.browseWriteButton.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.browseWriteButton.Location = new System.Drawing.Point(516, 56);
+            this.browseWriteButton.Location = new System.Drawing.Point(711, 55);
             this.browseWriteButton.Name = "browseWriteButton";
             this.browseWriteButton.Size = new System.Drawing.Size(24, 23);
             this.browseWriteButton.TabIndex = 5;
@@ -536,7 +510,7 @@ namespace PhotdiodeInterface
             this.saveStatisticsCheckBox.AutoSize = true;
             this.saveStatisticsCheckBox.Checked = true;
             this.saveStatisticsCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.saveStatisticsCheckBox.Location = new System.Drawing.Point(19, 56);
+            this.saveStatisticsCheckBox.Location = new System.Drawing.Point(60, 52);
             this.saveStatisticsCheckBox.Name = "saveStatisticsCheckBox";
             this.saveStatisticsCheckBox.Size = new System.Drawing.Size(96, 17);
             this.saveStatisticsCheckBox.TabIndex = 9;
@@ -551,7 +525,7 @@ namespace PhotdiodeInterface
             this.triggerParametersGroupBox.Controls.Add(this.triggerSourceLabel);
             this.triggerParametersGroupBox.Controls.Add(this.triggerSourceTextBox);
             this.triggerParametersGroupBox.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.triggerParametersGroupBox.Location = new System.Drawing.Point(8, 377);
+            this.triggerParametersGroupBox.Location = new System.Drawing.Point(8, 296);
             this.triggerParametersGroupBox.Name = "triggerParametersGroupBox";
             this.triggerParametersGroupBox.Size = new System.Drawing.Size(224, 86);
             this.triggerParametersGroupBox.TabIndex = 8;
@@ -565,7 +539,7 @@ namespace PhotdiodeInterface
             this.pauseTriggerPanel.Enabled = false;
             this.pauseTriggerPanel.Location = new System.Drawing.Point(98, 50);
             this.pauseTriggerPanel.Name = "pauseTriggerPanel";
-            this.pauseTriggerPanel.Size = new System.Drawing.Size(126, 36);
+            this.pauseTriggerPanel.Size = new System.Drawing.Size(126, 30);
             this.pauseTriggerPanel.TabIndex = 8;
             // 
             // pauseWhenLowButton
@@ -602,7 +576,7 @@ namespace PhotdiodeInterface
             // triggerSourceLabel
             // 
             this.triggerSourceLabel.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.triggerSourceLabel.Location = new System.Drawing.Point(16, 24);
+            this.triggerSourceLabel.Location = new System.Drawing.Point(16, 25);
             this.triggerSourceLabel.Name = "triggerSourceLabel";
             this.triggerSourceLabel.Size = new System.Drawing.Size(48, 16);
             this.triggerSourceLabel.TabIndex = 0;
@@ -610,7 +584,7 @@ namespace PhotdiodeInterface
             // 
             // triggerSourceTextBox
             // 
-            this.triggerSourceTextBox.Location = new System.Drawing.Point(120, 24);
+            this.triggerSourceTextBox.Location = new System.Drawing.Point(120, 23);
             this.triggerSourceTextBox.Name = "triggerSourceTextBox";
             this.triggerSourceTextBox.Size = new System.Drawing.Size(96, 20);
             this.triggerSourceTextBox.TabIndex = 1;
@@ -637,7 +611,7 @@ namespace PhotdiodeInterface
             0,
             0,
             65536});
-            this.horizontalScaleNumeric.Location = new System.Drawing.Point(126, 24);
+            this.horizontalScaleNumeric.Location = new System.Drawing.Point(126, 23);
             this.horizontalScaleNumeric.Maximum = new decimal(new int[] {
             50,
             0,
@@ -661,9 +635,9 @@ namespace PhotdiodeInterface
             this.plotParametersBox.Controls.Add(this.plottingCheckBox);
             this.plotParametersBox.Controls.Add(this.horizontalScaleLabel);
             this.plotParametersBox.Controls.Add(this.horizontalScaleNumeric);
-            this.plotParametersBox.Location = new System.Drawing.Point(8, 238);
+            this.plotParametersBox.Location = new System.Drawing.Point(8, 182);
             this.plotParametersBox.Name = "plotParametersBox";
-            this.plotParametersBox.Size = new System.Drawing.Size(224, 133);
+            this.plotParametersBox.Size = new System.Drawing.Size(224, 108);
             this.plotParametersBox.TabIndex = 11;
             this.plotParametersBox.TabStop = false;
             this.plotParametersBox.Text = "Plot Parameters";
@@ -673,7 +647,7 @@ namespace PhotdiodeInterface
             this.autoScaleCheckBox.AutoSize = true;
             this.autoScaleCheckBox.Checked = true;
             this.autoScaleCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.autoScaleCheckBox.Location = new System.Drawing.Point(19, 94);
+            this.autoScaleCheckBox.Location = new System.Drawing.Point(19, 83);
             this.autoScaleCheckBox.Name = "autoScaleCheckBox";
             this.autoScaleCheckBox.Size = new System.Drawing.Size(78, 17);
             this.autoScaleCheckBox.TabIndex = 16;
@@ -683,7 +657,7 @@ namespace PhotdiodeInterface
             // 
             // verticalScaleNumeric
             // 
-            this.verticalScaleNumeric.Location = new System.Drawing.Point(126, 56);
+            this.verticalScaleNumeric.Location = new System.Drawing.Point(126, 53);
             this.verticalScaleNumeric.Name = "verticalScaleNumeric";
             this.verticalScaleNumeric.Size = new System.Drawing.Size(90, 20);
             this.verticalScaleNumeric.TabIndex = 15;
@@ -696,7 +670,7 @@ namespace PhotdiodeInterface
             // verticalScaleLabel
             // 
             this.verticalScaleLabel.AutoSize = true;
-            this.verticalScaleLabel.Location = new System.Drawing.Point(16, 57);
+            this.verticalScaleLabel.Location = new System.Drawing.Point(16, 55);
             this.verticalScaleLabel.Name = "verticalScaleLabel";
             this.verticalScaleLabel.Size = new System.Drawing.Size(91, 13);
             this.verticalScaleLabel.TabIndex = 14;
@@ -705,7 +679,7 @@ namespace PhotdiodeInterface
             // plottingCheckBox
             // 
             this.plottingCheckBox.AutoSize = true;
-            this.plottingCheckBox.Location = new System.Drawing.Point(120, 94);
+            this.plottingCheckBox.Location = new System.Drawing.Point(120, 83);
             this.plottingCheckBox.Name = "plottingCheckBox";
             this.plottingCheckBox.Size = new System.Drawing.Size(81, 17);
             this.plottingCheckBox.TabIndex = 13;
@@ -716,7 +690,7 @@ namespace PhotdiodeInterface
             // horizontalScaleLabel
             // 
             this.horizontalScaleLabel.AutoSize = true;
-            this.horizontalScaleLabel.Location = new System.Drawing.Point(16, 27);
+            this.horizontalScaleLabel.Location = new System.Drawing.Point(16, 25);
             this.horizontalScaleLabel.Name = "horizontalScaleLabel";
             this.horizontalScaleLabel.Size = new System.Drawing.Size(101, 13);
             this.horizontalScaleLabel.TabIndex = 11;
@@ -737,9 +711,9 @@ namespace PhotdiodeInterface
             this.statisticsBox.Controls.Add(this.statisticsFrequencyNumeric);
             this.statisticsBox.Controls.Add(this.statisticsFrequencyLabel);
             this.statisticsBox.Controls.Add(this.saveStatisticsCheckBox);
-            this.statisticsBox.Location = new System.Drawing.Point(791, 343);
+            this.statisticsBox.Location = new System.Drawing.Point(8, 388);
             this.statisticsBox.Name = "statisticsBox";
-            this.statisticsBox.Size = new System.Drawing.Size(188, 120);
+            this.statisticsBox.Size = new System.Drawing.Size(224, 75);
             this.statisticsBox.TabIndex = 13;
             this.statisticsBox.TabStop = false;
             this.statisticsBox.Text = "Process Statistics";
@@ -751,14 +725,14 @@ namespace PhotdiodeInterface
             0,
             0,
             0});
-            this.statisticsFrequencyNumeric.Location = new System.Drawing.Point(120, 24);
+            this.statisticsFrequencyNumeric.Location = new System.Drawing.Point(126, 23);
             this.statisticsFrequencyNumeric.Maximum = new decimal(new int[] {
             120,
             0,
             0,
             0});
             this.statisticsFrequencyNumeric.Name = "statisticsFrequencyNumeric";
-            this.statisticsFrequencyNumeric.Size = new System.Drawing.Size(62, 20);
+            this.statisticsFrequencyNumeric.Size = new System.Drawing.Size(90, 20);
             this.statisticsFrequencyNumeric.TabIndex = 11;
             this.statisticsFrequencyNumeric.Value = new decimal(new int[] {
             60,
@@ -769,7 +743,7 @@ namespace PhotdiodeInterface
             // statisticsFrequencyLabel
             // 
             this.statisticsFrequencyLabel.AutoSize = true;
-            this.statisticsFrequencyLabel.Location = new System.Drawing.Point(16, 27);
+            this.statisticsFrequencyLabel.Location = new System.Drawing.Point(16, 25);
             this.statisticsFrequencyLabel.Name = "statisticsFrequencyLabel";
             this.statisticsFrequencyLabel.Size = new System.Drawing.Size(82, 13);
             this.statisticsFrequencyLabel.TabIndex = 10;
@@ -798,7 +772,6 @@ namespace PhotdiodeInterface
             ((System.ComponentModel.ISupportInitialize)(this.maximumValueNumeric)).EndInit();
             this.timingParametersGroupBox.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.rateNumeric)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.samplesPerChannelNumeric)).EndInit();
             this.writeToFileGroupBox.ResumeLayout(false);
             this.writeToFileGroupBox.PerformLayout();
             this.saveFileTypePanel.ResumeLayout(false);
@@ -871,6 +844,26 @@ namespace PhotdiodeInterface
                 channelParametersGroupBox.Enabled = false;
                 StartTask();
                 PrepareFileForData();
+
+                if (statisticsEnabled)
+                {
+                    acquisitionStart = DateTime.UtcNow;
+                    totalSamplesAcquired = 0;
+
+                    // Statistics timing
+                    samplesPerStatisticsInterval =
+                        (double)rateNumeric.Value /
+                        (double)statisticsFrequencyNumeric.Value;
+
+                    nextStatisticsSample = samplesPerStatisticsInterval;
+
+                    // Reset accumulators
+                    statisticsSamplesCollected = 0;
+                    statisticsSum = 0;
+                    statisticsSumSq = 0;
+                    statisticsMin = double.MaxValue;
+                    statisticsMax = double.MinValue;
+                }
             }
         }
 
@@ -885,12 +878,12 @@ namespace PhotdiodeInterface
 
                     //Create a virtual channel
                     myTask.AIChannels.CreateVoltageChannel(physicalChannelComboBox.Text, "",
-                        (AITerminalConfiguration)(-1), Convert.ToDouble(minimumValueNumeric.Value),
+                        AITerminalConfiguration.Rse, Convert.ToDouble(minimumValueNumeric.Value),
                         Convert.ToDouble(maximumValueNumeric.Value), AIVoltageUnits.Volts);
 
                     //Configure the timing parameters
                     myTask.Timing.ConfigureSampleClock("", Convert.ToDouble(rateNumeric.Value),
-                        SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1000);
+                        SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, (int)rateNumeric.Value);
 
                     if (triggerSourceTextBox.Text != "")
                     {
@@ -904,8 +897,6 @@ namespace PhotdiodeInterface
                     acquisitionStart = DateTime.UtcNow;
                     totalSamplesAcquired = 0;
 
-                    int samples = Convert.ToInt32(samplesPerChannelNumeric.Value);
-
                     runningTask = myTask;
                     analogInReader = new AnalogMultiChannelReader(myTask.Stream);
 
@@ -917,7 +908,7 @@ namespace PhotdiodeInterface
 
                     analogCallback = new AsyncCallback(AnalogInCallback);
 
-                    analogInReader.BeginReadMultiSample(samples, analogCallback, myTask);
+                    analogInReader.BeginReadMultiSample((int)rateNumeric.Value, analogCallback, myTask);
                 }
                 catch (DaqException exception)
                 {
@@ -987,7 +978,7 @@ namespace PhotdiodeInterface
                         }
                     }
                     
-                    analogInReader.BeginReadMultiSample(Convert.ToInt32(samplesPerChannelNumeric.Value),analogCallback, myTask);
+                    analogInReader.BeginReadMultiSample(Convert.ToInt32(rateNumeric.Value),analogCallback, myTask);
                 }
             }
             catch (DaqException exception)
@@ -1003,67 +994,176 @@ namespace PhotdiodeInterface
         }
         private void UpdatePlot(double[,] data)
         {
-            plotSamples = Convert.ToInt32(rateNumeric.Value * horizontalScaleNumeric.Value);
+            int rate = (int)rateNumeric.Value;
+
+            // Number of samples visible on screen
+            int visibleSamples = (int)(rate * (double)horizontalScaleNumeric.Value);
+
+            // Keep 10 seconds of history minimum
+            int maxHistorySamples = Math.Max(rate * 10, visibleSamples);
+
+            //---------------------------------------------------
+            // Add new samples to history buffer
+            //---------------------------------------------------
             for (int i = 0; i < data.GetLength(1); i++)
             {
-                plotBuffer.Enqueue(data[0, i]);
+                plotHistory.Enqueue(data[0, i]);
 
-                while (plotBuffer.Count > plotSamples)
-                    plotBuffer.Dequeue();
+                while (plotHistory.Count > maxHistorySamples)
+                    plotHistory.Dequeue();
             }
 
-            if ((DateTime.Now - lastPlotUpdate).TotalMilliseconds > 100)
+            //---------------------------------------------------
+            // Limit redraw rate
+            //---------------------------------------------------
+            if ((DateTime.Now - lastPlotUpdate).TotalMilliseconds < 100)
+                return;
+
+            lastPlotUpdate = DateTime.Now;
+
+            //---------------------------------------------------
+            // Determine visible range
+            //---------------------------------------------------
+            int availableSamples = plotHistory.Count;
+
+            int samplesToShow = Math.Min(visibleSamples, availableSamples);
+
+            if (samplesToShow == 0)
+                return;
+
+            //---------------------------------------------------
+            // Get latest samples only
+            //---------------------------------------------------
+            double[] history = plotHistory.ToArray();
+
+            int startIndex = availableSamples - samplesToShow;
+
+            //---------------------------------------------------
+            // Downsample for rendering
+            //---------------------------------------------------
+            int maxDisplayPoints = 1000;
+
+            int stride = Math.Max(1, samplesToShow / maxDisplayPoints);
+
+            //---------------------------------------------------
+            // Update axis
+            //---------------------------------------------------
+            waveformChart.ChartAreas[0].AxisX.Minimum =
+                -(double)samplesToShow / rate;
+
+            waveformChart.ChartAreas[0].AxisX.Maximum = 0;
+
+            //---------------------------------------------------
+            // Redraw
+            //---------------------------------------------------
+            var series = waveformChart.Series[0];
+            series.Points.Clear();
+
+            for (int i = startIndex; i < availableSamples; i += stride)
             {
-                waveformChart.Series[0].Points.Clear();
+                int samplesBehind = availableSamples - 1 - i;
 
-                int x = 0;
+                double t = -(double)samplesBehind / rate;
 
-                foreach (double value in plotBuffer)
-                {
-                    waveformChart.Series[0].Points.AddXY(x++ / rateNumeric.Value, value);
-                }
-                lastPlotUpdate = DateTime.Now;
+                series.Points.AddXY(t, history[i]);
             }
         }
         private void WriteStatisticsToFile(double[,] data)
         {
-            DateTime now = DateTime.UtcNow;
+            int samplesInCallback = data.GetLength(1);
 
-            double sampleRate = (double)rateNumeric.Value;
+            // Sample number where this callback begins
+            long callbackStartSample =
+                totalSamplesAcquired - samplesInCallback;
 
-            if (totalSamplesAcquired < nextStatisticsSample)
-                return;
-
-            nextStatisticsSample += (long)(sampleRate / (long)statisticsFrequencyNumeric.Value);
-
-            int samples = data.GetLength(1);
-
-            double sum = 0;
-            double sumSq = 0;
-
-            double min = double.MaxValue;
-            double max = double.MinValue;
-
-            for (int i = 0; i < samples; i++)
+            for (int i = 0; i < samplesInCallback; i++)
             {
+                //------------------------------------------
+                // Absolute sample index in acquisition
+                //------------------------------------------
+
+                long currentSample = callbackStartSample + i + 1;
+
                 double v = data[0, i];
 
-                sum += v;
-                sumSq += v * v;
+                //------------------------------------------
+                // Accumulate statistics
+                //------------------------------------------
 
-                if (v < min) min = v;
-                if (v > max) max = v;
+                statisticsSamplesCollected++;
+
+                statisticsSum += v;
+                statisticsSumSq += v * v;
+
+                if (v < statisticsMin)
+                    statisticsMin = v;
+
+                if (v > statisticsMax)
+                    statisticsMax = v;
+
+                //------------------------------------------
+                // Check if we've crossed boundary
+                //------------------------------------------
+
+                if (currentSample >= nextStatisticsSample)
+                {
+                    //--------------------------------------
+                    // Calculate statistics
+                    //--------------------------------------
+
+                    double mean =
+                        statisticsSum / statisticsSamplesCollected;
+
+                    double rms =
+                        Math.Sqrt(
+                            statisticsSumSq /
+                            statisticsSamplesCollected);
+
+                    //--------------------------------------
+                    // Timestamp
+                    //--------------------------------------
+
+                    double elapsedSeconds =
+                        currentSample /
+                        (double)rateNumeric.Value;
+
+                    double timestamp =
+                        acquisitionStart
+                            .AddSeconds(elapsedSeconds)
+                            .ToOADate();
+
+                    //--------------------------------------
+                    // Write to file
+                    //--------------------------------------
+
+                    timestampWriter.WriteLine(
+                        $"{timestamp:F10}," +
+                        $"{elapsedSeconds:F6}," +
+                        $"{mean:F6}," +
+                        $"{statisticsMin:F6}," +
+                        $"{statisticsMax:F6}," +
+                        $"{rms:F6}");
+
+                    //--------------------------------------
+                    // Reset accumulator
+                    //--------------------------------------
+
+                    statisticsSamplesCollected = 0;
+
+                    statisticsSum = 0;
+                    statisticsSumSq = 0;
+
+                    statisticsMin = double.MaxValue;
+                    statisticsMax = double.MinValue;
+
+                    //--------------------------------------
+                    // Schedule next boundary
+                    //--------------------------------------
+
+                    nextStatisticsSample +=
+                        samplesPerStatisticsInterval;
+                }
             }
-
-            double mean = sum / samples;
-            double rms = Math.Sqrt(sumSq / samples);
-
-            double elapsedSeconds = (totalSamplesAcquired - samples) / (double)rateNumeric.Value;
-
-            double timestamp = acquisitionStart.AddSeconds(elapsedSeconds).ToOADate();
-
-            timestampWriter.WriteLine(
-                $"{timestamp:F10},{elapsedSeconds:F6},{mean:F6},{min:F6},{max:F6},{rms:F6}");
 
             timestampWriter.Flush();
         }
@@ -1159,7 +1259,7 @@ namespace PhotdiodeInterface
         {
             try
             {
-                string timestamp = DateTime.Now.ToString("yyyy-MMdd_HHmmss");
+                string timestamp = DateTime.Now.ToString("Photodiode_yyyy-MMdd_HHmmss");
 
                 sessionFolder = Path.Combine(outputRootFolder, timestamp);
                 Directory.CreateDirectory(sessionFolder);
@@ -1236,14 +1336,9 @@ namespace PhotdiodeInterface
 
             startButton.Enabled = false;
         }
-        private void rateNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            plotSamples = Convert.ToInt32(rateNumeric.Value * horizontalScaleNumeric.Value);
-        }
 
         private void horizontalScale_ValueChanged(object sender, EventArgs e)
         {
-            plotSamples = Convert.ToInt32(rateNumeric.Value * horizontalScaleNumeric.Value);
             waveformChart.ChartAreas[0].AxisX.Maximum = (double)horizontalScaleNumeric.Value;
         }
 
@@ -1291,6 +1386,19 @@ namespace PhotdiodeInterface
         {
             verticalScaleNumeric.Minimum = minimumValueNumeric.Value;
             verticalScaleNumeric.Maximum = maximumValueNumeric.Value;
+        }
+
+        private void rateNumeric_ValueChanged(object sender, EventArgs e)
+        {
+            if (runningTask != null)
+            {
+                myTask.Stop();
+                myTask.Timing.ConfigureSampleClock("", Convert.ToDouble(rateNumeric.Value),
+                        SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, (int)rateNumeric.Value);
+                myTask.Start();
+            }
+            
+            
         }
     }
 }
