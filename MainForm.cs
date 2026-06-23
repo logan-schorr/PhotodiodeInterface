@@ -913,14 +913,12 @@ namespace PhotdiodeInterface
             int rate = (int)rateNumeric.Value;
 
             // Number of samples visible on screen
-            int visibleSamples = (int)(rate * (double)horizontalScaleNumeric.Value);
+            int visibleSamples = (int)Math.Round(rate * (double)horizontalScaleNumeric.Value) + 1;
 
             // Keep 10 seconds of history minimum
             int maxHistorySamples = Math.Max(rate * 10, visibleSamples);
 
-            //---------------------------------------------------
             // Add new samples to history buffer
-            //---------------------------------------------------
             for (int i = 0; i < data.GetLength(1); i++)
             {
                 plotHistory.Enqueue(data[0, i]);
@@ -929,17 +927,13 @@ namespace PhotdiodeInterface
                     plotHistory.Dequeue();
             }
 
-            //---------------------------------------------------
             // Limit redraw rate
-            //---------------------------------------------------
             if ((DateTime.Now - lastPlotUpdate).TotalMilliseconds < 100)
                 return;
 
             lastPlotUpdate = DateTime.Now;
 
-            //---------------------------------------------------
             // Determine visible range
-            //---------------------------------------------------
             int availableSamples = plotHistory.Count;
 
             int samplesToShow = Math.Min(visibleSamples, availableSamples);
@@ -947,31 +941,21 @@ namespace PhotdiodeInterface
             if (samplesToShow == 0)
                 return;
 
-            //---------------------------------------------------
             // Get latest samples only
-            //---------------------------------------------------
             double[] history = plotHistory.ToArray();
 
             int startIndex = availableSamples - samplesToShow;
 
-            //---------------------------------------------------
             // Downsample for rendering
-            //---------------------------------------------------
             int maxDisplayPoints = 1000;
 
             int stride = Math.Max(1, samplesToShow / maxDisplayPoints);
 
-            //---------------------------------------------------
             // Update axis
-            //---------------------------------------------------
-            waveformChart.ChartAreas[0].AxisX.Minimum =
-                -(double)samplesToShow / rate;
+            waveformChart.ChartAreas[0].AxisX.Minimum = (-(double)samplesToShow + 1) / rate;
 
             waveformChart.ChartAreas[0].AxisX.Maximum = 0;
 
-            //---------------------------------------------------
-            // Redraw
-            //---------------------------------------------------
             var series = waveformChart.Series[0];
             series.Points.Clear();
 
@@ -983,6 +967,12 @@ namespace PhotdiodeInterface
 
                 series.Points.AddXY(t, history[i]);
             }
+            Console.WriteLine(
+    $"visibleSamples={visibleSamples}, " +
+    $"axisMin={waveformChart.ChartAreas[0].AxisX.Minimum}, " +
+    $"firstPoint={series.Points[0].XValue}, " +
+    $"lastPoint={series.Points[series.Points.Count - 1].XValue}"
+);
         }
         private void WriteStatisticsToFile(double[,] data)
         {
