@@ -1109,21 +1109,26 @@ namespace PhotdiodeInterface
         {
             int channels = data.GetLength(0);
             int samples = data.GetLength(1);
+            double sum = 0;
+
+            int rows = data.GetLength(0);
+
+            for (int i = 0; i < rows; i++)
+            {
+                sum += data[i, 0];
+            }
+
+            double average = sum / rows;
+
+            // Checking to make sure that there has actually been deposition, only filters at high rates
+            if (samples > 10000 && average < 0.1)
+                return;
 
             if (useTextFileWrite)
             {
                 for (int i = 0; i < samples; i++)
                 {
-                    for (int ch = 0; ch < channels; ch++)
-                    {
-                        fileStreamWriter.Write(
-                            data[ch, i].ToString("E6"));
-
-                        if (ch < channels - 1)
-                            fileStreamWriter.Write('\t');
-                    }
-
-                    fileStreamWriter.WriteLine();
+                    fileStreamWriter.Write(data[0, i].ToString("E6"));
                 }
 
                 fileStreamWriter.Flush();
@@ -1132,10 +1137,7 @@ namespace PhotdiodeInterface
             {
                 for (int i = 0; i < samples; i++)
                 {
-                    for (int ch = 0; ch < channels; ch++)
-                    {
-                        fileBinaryWriter.Write(data[ch, i]);
-                    }
+                    fileBinaryWriter.Write(data[0, i]);
                 }
 
                 fileBinaryWriter.Flush();
